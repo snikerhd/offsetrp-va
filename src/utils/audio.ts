@@ -1,140 +1,180 @@
+// Audio utility for police terminal sounds
+// Uses Web Audio API for generating procedural sounds
+
 let soundEnabled = true;
 
-export function setSoundEnabled(enabled: boolean) {
+export const setSoundEnabled = (enabled: boolean) => {
   soundEnabled = enabled;
-}
+};
 
-function getAudioContext(): AudioContext | null {
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-  if (!AudioContextClass) return null;
-  // Create or resume context
+export const getSoundEnabled = () => soundEnabled;
+
+// Create audio context lazily to avoid browser restrictions
+const getAudioContext = (): AudioContext | null => {
   try {
-    return new AudioContextClass();
-  } catch (e) {
+    return new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+  } catch {
+    console.warn('Web Audio API not supported');
     return null;
   }
-}
+};
 
-export function playClick() {
+// Play a short click sound
+export const playClick = () => {
   if (!soundEnabled) return;
+  
   const ctx = getAudioContext();
   if (!ctx) return;
   
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(550, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.08);
-  
-  gain.gain.setValueAtTime(0.04, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
-  
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  
-  osc.start();
-  osc.stop(ctx.currentTime + 0.08);
-}
-
-export function playSuccess() {
-  if (!soundEnabled) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  
-  const now = ctx.currentTime;
-  
-  // High-quality modern chime chord
-  const frequencies = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
-  frequencies.forEach((freq, idx) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+  try {
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
     
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
     
-    gain.gain.setValueAtTime(0.02, now + idx * 0.04);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.04 + 0.35);
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
     
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
     
-    osc.start(now + idx * 0.04);
-    osc.stop(now + idx * 0.04 + 0.35);
-  });
-}
-
-export function playRadioChirp() {
-  if (!soundEnabled) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  
-  const now = ctx.currentTime;
-  
-  // Pitch modulation oscillator
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
-  
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(900, now);
-  osc.frequency.linearRampToValueAtTime(1300, now + 0.03);
-  osc.frequency.linearRampToValueAtTime(950, now + 0.07);
-  osc.frequency.exponentialRampToValueAtTime(180, now + 0.12);
-  
-  filter.type = 'bandpass';
-  filter.frequency.setValueAtTime(1100, now);
-  filter.Q.setValueAtTime(4.0, now);
-  
-  gain.gain.setValueAtTime(0.03, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-  
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(ctx.destination);
-  
-  osc.start(now);
-  osc.stop(now + 0.12);
-
-  // Play static chirp blend
-  setTimeout(() => {
-    playStaticVolume(0.015, 0.08);
-  }, 10);
-}
-
-export function playStatic() {
-  playStaticVolume(0.02, 0.15);
-}
-
-function playStaticVolume(volume: number, duration: number) {
-  if (!soundEnabled) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  
-  const bufferSize = ctx.sampleRate * duration;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = Math.random() * 2 - 1;
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.05);
+  } catch (e) {
+    // Silently fail if audio doesn't work
   }
+};
+
+// Play success sound (two-tone chime)
+export const playSuccess = () => {
+  if (!soundEnabled) return;
   
-  const noise = ctx.createBufferSource();
-  noise.buffer = buffer;
+  const ctx = getAudioContext();
+  if (!ctx) return;
   
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.setValueAtTime(1400, ctx.currentTime);
-  filter.Q.setValueAtTime(2.0, ctx.currentTime);
+  try {
+    const playTone = (freq: number, startTime: number, duration: number) => {
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      oscillator.frequency.value = freq;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.15, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+    
+    playTone(523.25, ctx.currentTime, 0.1);     // C5
+    playTone(659.25, ctx.currentTime + 0.08, 0.15); // E5
+  } catch (e) {
+    // Silently fail
+  }
+};
+
+// Play radio chirp sound (classic police radio effect)
+export const playRadioChirp = () => {
+  if (!soundEnabled) return;
   
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(volume, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  const ctx = getAudioContext();
+  if (!ctx) return;
   
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(ctx.destination);
+  try {
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.type = 'square';
+    
+    // Chirp pattern: quick frequency sweep
+    oscillator.frequency.setValueAtTime(1200, ctx.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.03);
+    oscillator.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.06);
+    oscillator.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+    
+    gainNode.gain.setValueAtTime(0.08, ctx.currentTime);
+    gainNode.gain.setValueAtTime(0.08, ctx.currentTime + 0.08);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.12);
+  } catch (e) {
+    // Silently fail
+  }
+};
+
+// Play static noise (radio static effect)
+export const playStatic = () => {
+  if (!soundEnabled) return;
   
-  noise.start();
-  noise.stop(ctx.currentTime + duration);
-}
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  
+  try {
+    const bufferSize = ctx.sampleRate * 0.15;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    
+    // Generate white noise
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    
+    const gainNode = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    
+    filter.type = 'bandpass';
+    filter.frequency.value = 2000;
+    filter.Q.value = 0.5;
+    
+    noise.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    gainNode.gain.setValueAtTime(0.06, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+    
+    noise.start(ctx.currentTime);
+    noise.stop(ctx.currentTime + 0.15);
+  } catch (e) {
+    // Silently fail
+  }
+};
+
+// Play alert/warning sound
+export const playAlert = () => {
+  if (!soundEnabled) return;
+  
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  
+  try {
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.value = 440;
+    
+    gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.3);
+  } catch (e) {
+    // Silently fail
+  }
+};
